@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require("express");
-const { NotFoundError } = require('../expressError');
+const { NotFoundError, BadRequestError } = require('../expressError');
 
 const db = require("../db");
 const router = new express.Router();
@@ -37,11 +37,54 @@ router.get('/:code', async function(req, res) {
 
   const company = results.rows[0];
   if (!company) {
-    console.log('Supposed to get a not found error.')
     throw new NotFoundError();
   }
 
   return res.json({ company });
 })
+
+/**
+ * POST / companies/
+ * Returns obj of new company: {company: {code, name, description}}
+ */
+router.post('/', async function(req, res) {
+  const {code, name, description} = req.body;
+  if (!code || !name || !description) throw new BadRequestError();
+  const result = await db.query(
+    `INSERT INTO companies (code, name, description)
+        VALUES ($1, $2, $3)
+        RETURNING code, name, description`,
+        [code, name, description]
+  );
+  const company = result.rows[0];
+  return res.status(201).json({ company });
+
+})
+
+/**
+ * PUT /companies/:code
+ * Returns update company object: {company: {code, name, description}}
+ */
+router.put('/:code', async function(req, res) {
+  const { name, description } = req.body;
+  if (!name || !description) throw new BadRequestError();
+  const result = await db.query(
+    `UPDATE companies
+          SET name=$1,
+              description=$2
+          WHERE code = $3
+          RETURNING code, name, description`,
+    [name, description, req.params.code]
+  );
+
+  console.log("result", result);
+
+  const company = result.rows[0];
+  if (!company) throw new NotFoundError();
+
+  return res.json({ company });
+
+})
+
 
 module.exports = router;
