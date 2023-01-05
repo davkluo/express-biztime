@@ -2,6 +2,7 @@
 
 const express = require("express");
 const { NotFoundError, BadRequestError } = require('../expressError');
+const NOT_FOUND_ERROR_MSG = "Could not find that company.";
 
 const db = require("../db");
 const router = new express.Router();
@@ -37,7 +38,7 @@ router.get('/:code', async function(req, res) {
 
   const company = results.rows[0];
   if (!company) {
-    throw new NotFoundError();
+    throw new NotFoundError(NOT_FOUND_ERROR_MSG);
   }
 
   return res.json({ company });
@@ -78,7 +79,7 @@ router.put('/:code', async function(req, res) {
   );
 
   const company = result.rows[0];
-  if (!company) throw new NotFoundError();
+  if (!company) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
 
   return res.json({ company });
 
@@ -99,7 +100,7 @@ router.delete('/:code', async function(req, res) {
   );
 
   const company = result.rows[0];
-  if (!company) throw new NotFoundError();
+  if (!company) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
 
   return res.json({status: 'deleted'});
 })
