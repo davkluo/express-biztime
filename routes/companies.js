@@ -24,22 +24,33 @@ router.get('/', async function(req, res) {
 
 /**
  * GET /companies/:code
- * Return obj of company: {company: {code, name, description}}
+ * Return obj of company:
+ * {company: {code, name, description, invoices: [id, ...]}}
  */
 router.get('/:code', async function(req, res) {
   const code = req.params.code;
 
-  const results = await db.query(
+  const companyResults = await db.query(
     `SELECT code, name, description
       FROM companies
-      WHERE code = $1`,
+      WHERE code = $1`,  //TODO: add join
     [code]
   );
 
-  const company = results.rows[0];
+  const company = companyResults.rows[0];
   if (!company) {
     throw new NotFoundError(NOT_FOUND_ERROR_MSG);
   }
+
+  const invoiceResults = await db.query(
+    `SELECT id
+      FROM invoices
+      WHERE comp_code = $1`,
+      [company.code]
+  );
+
+  company.invoices = invoiceResults.rows.map(i => i.id)
+
 
   return res.json({ company });
 });

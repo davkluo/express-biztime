@@ -32,7 +32,7 @@ router.get('/:id', async function(req, res) {
   const invoiceResults = await db.query(
     `SELECT id, comp_code, amt, paid, add_date, paid_date
       FROM invoices
-      WHERE id = $1`,
+      WHERE id = $1`,  // TODO: use a join to capture company & delete below query
     [req.params.id]
   );
   const invoice = invoiceResults.rows[0];
@@ -52,66 +52,75 @@ router.get('/:id', async function(req, res) {
   return res.json({ invoice });
 });
 
-// /**
-//  * POST / companies/
-//  * Returns obj of new company: {company: {code, name, description}}
-//  */
-// router.post('/', async function(req, res) {
-//   const {code, name, description} = req.body;
-//   if (!code || !name || !description) throw new BadRequestError();
-//   const result = await db.query(
-//     `INSERT INTO companies (code, name, description)
-//         VALUES ($1, $2, $3)
-//         RETURNING code, name, description`,
-//         [code, name, description]
-//   );
-//   const company = result.rows[0];
-//   return res.status(201).json({ company });
+/**
+ * POST / invoices/
+ * Returns: {invoice: {id, comp_code, amt, paid, add_date, paid_date}}
+ */
+router.post('/', async function(req, res) {
+  const {comp_code, amt} = req.body;
+  if (!comp_code || !amt ) throw new BadRequestError();
 
-// });
+  let result;
 
-// /**
-//  * PUT /companies/:code
-//  * Returns update company object: {company: {code, name, description}}
-//  */
-// router.put('/:code', async function(req, res) {
-//   const { name, description } = req.body;
-//   if (!name || !description) throw new BadRequestError();
-//   const result = await db.query(
-//     `UPDATE companies
-//           SET name=$1,
-//               description=$2
-//           WHERE code = $3
-//           RETURNING code, name, description`,
-//     [name, description, req.params.code]
-//   );
+  try {
+    result = await db.query(
+      `INSERT INTO invoices (comp_code, amt)
+          VALUES ($1, $2)
+          RETURNING id, comp_code, amt, paid, add_date, paid_date`,
+          [comp_code, amt]
+    );
+  } catch(err) {
+    //TODO: could add if to add another catch for a duplicate key error
+    throw new NotFoundError(`${comp_code} not found`);  //TODO: update to bad req
+  }
 
-//   const company = result.rows[0];
-//   if (!company) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
+  const invoice = result.rows[0];
+  return res.status(201).json({ invoice });
 
-//   return res.json({ company });
+});
 
-// });
+/**
+ * PUT /invoices/:id
+ * If invoice cannot be found, returns a 404.
+ * Returns: {invoice: {id, comp_code, amt, paid, add_date, paid_date}}
+ */
+router.put('/:id', async function(req, res) {
+  const { amt } = req.body;
+  if (!amt ) throw new BadRequestError();
+  const result = await db.query(
+    `UPDATE invoices
+          SET amt=$1
+          WHERE id = $2
+          RETURNING id, comp_code, amt, paid, add_date, paid_date`,
+    [amt, req.params.id]
+  );
 
-// /**
-//  * DELETE /companies/:code
-//  * Deletes company.
-//  * Should return 404 if company cannot be found.
-//  * Returns {status: "deleted"}
-//  */
-// router.delete('/:code', async function(req, res) {
-//   const result = await db.query(
-//     `DELETE FROM companies
-//       WHERE code = $1
-//       RETURNING code, name, description`,
-//     [req.params.code]
-//   );
+  const invoice = result.rows[0];
+  if (!invoice) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
 
-//   const company = result.rows[0];
-//   if (!company) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
+  return res.json({ invoice });
 
-//   return res.json({status: 'deleted'});
-// })
+});
+
+/**
+ * DELETE /invoices/:id
+ * Deletes invoice.
+ * Should return 404 if invoice cannot be found.
+ * Returns {status: "deleted"}
+ */
+router.delete('/:id', async function(req, res) {
+  const result = await db.query(
+    `DELETE FROM invoices
+      WHERE id = $1
+      RETURNING id, comp_code, amt, paid, add_date, paid_date`,// TODO: just return id
+    [req.params.id]
+  );
+
+  const invoice = result.rows[0];
+  if (!invoice) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
+
+  return res.json({status: 'deleted'});
+})
 
 
 module.exports = router;
