@@ -29,25 +29,19 @@ router.get('/', async function(req, res) {
  * }
  */
 router.get('/:id', async function(req, res) {
-  const invoiceResults = await db.query(
-    `SELECT id, comp_code, amt, paid, add_date, paid_date
-      FROM invoices
-      WHERE id = $1`,  // TODO: use a join to capture company & delete below query
+  const result = await db.query(
+    `SELECT i.id, i.amt, i.paid, i.add_date, i.paid_date, c.code, c.name, c.description
+      FROM invoices AS i
+        JOIN companies as c
+          ON i.comp_code = c.code
+      WHERE i.id = $1`,
     [req.params.id]
   );
-  const invoice = invoiceResults.rows[0];
-  if (!invoice) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
+  const invoiceAndCompany = result.rows[0];
+  if (!invoiceAndCompany) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
 
-  const companyResults = await db.query(
-    `SELECT code, name, description
-      FROM companies
-      WHERE code = $1`,
-    [invoice.comp_code]
-  );
-  const company = companyResults.rows[0];
-
-  delete invoice['comp_code'];
-  invoice.company = company;
+  let { code, name, description, ...invoice } = invoiceAndCompany;
+  invoice.company = { code, name, description };
 
   return res.json({ invoice });
 });
@@ -70,8 +64,9 @@ router.post('/', async function(req, res) {
           [comp_code, amt]
     );
   } catch(err) {
-    //TODO: could add if to add another catch for a duplicate key error
-    throw new NotFoundError(`${comp_code} not found`);  //TODO: update to bad req
+    if (err.message.includes('violates foreign key constraint')) {
+      throw new BadRequestError(`${comp_code} company code does not exist`);
+    }
   }
 
   const invoice = result.rows[0];
@@ -82,24 +77,49 @@ router.post('/', async function(req, res) {
 /**
  * PUT /invoices/:id
  * If invoice cannot be found, returns a 404.
+ * Needs to be passed in a JSON body of {amt, paid}
  * Returns: {invoice: {id, comp_code, amt, paid, add_date, paid_date}}
  */
 router.put('/:id', async function(req, res) {
-  const { amt } = req.body;
-  if (!amt ) throw new BadRequestError();
+  const { amt, paid } = req.body;
+  if (!amt || paid === undefined) throw new BadRequestError();
+
+  const id = req.params.id;
+
+  const getResult = await db.query(
+    `SELECT paid, paid_date
+      FROM invoices
+      WHERE id = $1`,
+    [id]
+  );
+
+  const invoiceBefore = getResult.rows[0];
+  if (!invoiceBefore) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
+
+  let paidDate = invoiceBefore.paid_date;
+
+  if (!invoiceBefore.paid && paid) { // Here we are paying the invoice
+    paidDate = new Date();
+  } else if (invoiceBefore.paid && !paid) { // Here we are unpaying the invoice
+    paidDate = null;
+  }
+
   const result = await db.query(
     `UPDATE invoices
-          SET amt=$1
-          WHERE id = $2
+          SET amt=$1,
+            paid=$2,
+            paid_date=$3
+          WHERE id = $4
           RETURNING id, comp_code, amt, paid, add_date, paid_date`,
-    [amt, req.params.id]
+    [amt, paid, paidDate, id]
   );
 
   const invoice = result.rows[0];
-  if (!invoice) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
+
+  // Redundant now with above check
+  // if (!invoice) throw new NotFoundError(NOT_FOUND_ERROR_MSG);
 
   return res.json({ invoice });
-
 });
 
 /**
@@ -112,7 +132,7 @@ router.delete('/:id', async function(req, res) {
   const result = await db.query(
     `DELETE FROM invoices
       WHERE id = $1
-      RETURNING id, comp_code, amt, paid, add_date, paid_date`,// TODO: just return id
+      RETURNING id`,
     [req.params.id]
   );
 

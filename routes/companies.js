@@ -33,7 +33,7 @@ router.get('/:code', async function(req, res) {
   const companyResults = await db.query(
     `SELECT code, name, description
       FROM companies
-      WHERE code = $1`,  //TODO: add join
+      WHERE code = $1`, // Could also do a join
     [code]
   );
 
@@ -50,7 +50,6 @@ router.get('/:code', async function(req, res) {
   );
 
   company.invoices = invoiceResults.rows.map(i => i.id)
-
 
   return res.json({ company });
 });
